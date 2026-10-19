@@ -1,6 +1,5 @@
 const admin = require('firebase-admin');
 const axios = require('axios');
-const cheerio = require('cheerio');
 
 let serviceAccount;
 try {
@@ -18,56 +17,52 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-async function scrapeGovContacts() {
+// ডিফল্ট সরকারি প্রধান জরুরি হটলাইন ডাটা
+const emergencyServicesBD = [
+  { name: "জাতীয় জরুরি সেবা", phone: "999", category: "emergency" },
+  { name: "সরকারি তথ্য ও সেবা", phone: "333", category: "govt" },
+  { name: "নারী ও শিশু নির্যাতন প্রতিরোধ সেল", phone: "109", category: "helpline" },
+  { name: "দুদক হটলাইন", phone: "106", category: "govt" },
+  { name: "দুর্যোগের আগাম বার্তা", phone: "1090", category: "disaster" },
+  { name: "জাতীয় পরিচয়পত্র তথ্য", phone: "105", category: "govt" },
+  { name: "শিশু সহায়তা ফোন", phone: "1098", category: "helpline" },
+  { name: "স্বাস্থ্য বাতায়ন", phone: "16263", category: "health" }
+];
+
+async function updateEmergencyContacts() {
   try {
-    console.log("ডাটা স্ক্র্যাপিং শুরু হচ্ছে...");
-    const url = 'https://bangladesh.gov.bd/site/view/all_hotlines'; 
+    console.log("ডাটা আপডেট শুরু হচ্ছে...");
     
-    // 403 Forbidden বাইপাস করার জন্য পূর্ণাঙ্গ Browser Headers
-    const { data } = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9,bn;q=0.8',
-        'Cache-Control': 'no-cache'
+    let contacts = [...emergencyServicesBD];
+
+    // রিয়েলটাইম ওপেন ডাটা সোর্স চেষ্টা করা
+    try {
+      const response = await axios.get('https://raw.githubusercontent.com/nuralam365/bangladesh-emergency-hotline-json/main/hotlines.json', { timeout: 5000 });
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        contacts = response.data;
       }
-    });
-
-    const $ = cheerio.load(data);
-    let contacts = [];
-
-    $('.hotline-item, tr').each((i, elem) => {
-      const name = $(elem).find('.title, td:nth-child(1)').text().trim();
-      const phone = $(elem).find('.number, td:nth-child(2)').text().trim();
-      
-      if (name && phone) {
-        contacts.push({
-          name: name,
-          phone: phone,
-          category: "govt",
-          updatedAt: new Date().toISOString()
-        });
-      }
-    });
-
-    if (contacts.length === 0) {
-      console.log("সাইট রেসপন্স করেছে কিন্তু কোনো কন্টাক্ট ডাটা পাওয়া যায়নি।");
-      return;
+    } catch (apiError) {
+      console.log("লাইভ এপিআই সাড়া দেয়নি, প্রস্তুতকৃত অফিশিয়াল হটলাইন ডাটা ব্যবহৃত হচ্ছে।");
     }
 
     const batch = db.batch();
     contacts.forEach(contact => {
       const docRef = db.collection('emergency_contacts').doc();
-      batch.set(docRef, contact, { merge: true });
+      batch.set(docRef, {
+        name: contact.name,
+        phone: contact.phone,
+        category: contact.category || "govt",
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
     });
 
     await batch.commit();
     console.log(`সফলভাবে ${contacts.length} টি কন্টাক্ট ক্লাউড ডাটাবেসে সেভ করা হয়েছে!`);
 
   } catch (error) {
-    console.error("অটো-স্ক্র্যাপিংয়ে ত্রুটি:", error.message);
+    console.error("ডাটা আপডেটে ত্রুটি:", error.message);
     process.exit(1);
   }
 }
 
-scrapeGovContacts();
+updateEmergencyContacts();
