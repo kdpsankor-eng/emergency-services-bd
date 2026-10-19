@@ -2,12 +2,11 @@ const admin = require('firebase-admin');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// JSON parsing handling for GitHub Secrets
 let serviceAccount;
 try {
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 } catch (e) {
-  console.error("Firebase Service Account JSON পার্স করতে সমস্যা হয়েছে! সিক্রেট কি চেক করুন।");
+  console.error("Firebase Service Account JSON পার্স করতে সমস্যা হয়েছে!");
   process.exit(1);
 }
 
@@ -45,7 +44,7 @@ async function scrapeGovContacts() {
     });
 
     if (contacts.length === 0) {
-      console.log("কোনো ডাটা পাওয়া যায়নি অথবা সাইটের লেআউট ভিন্ন।");
+      console.log("কোনো ডাটা পাওয়া যায়নি।");
       return;
     }
 
