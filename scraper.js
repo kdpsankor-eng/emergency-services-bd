@@ -2,11 +2,20 @@ const admin = require('firebase-admin');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+// JSON parsing handling for GitHub Secrets
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} catch (e) {
+  console.error("Firebase Service Account JSON পার্স করতে সমস্যা হয়েছে! সিক্রেট কি চেক করুন।");
+  process.exit(1);
+}
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+}
 
 const db = admin.firestore();
 
@@ -14,7 +23,9 @@ async function scrapeGovContacts() {
   try {
     console.log("ডাটা স্ক্র্যাপিং শুরু হচ্ছে...");
     const url = 'https://bangladesh.gov.bd/site/view/all_hotlines'; 
-    const { data } = await axios.get(url);
+    const { data } = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
     const $ = cheerio.load(data);
     
     let contacts = [];
@@ -28,13 +39,15 @@ async function scrapeGovContacts() {
           name: name,
           phone: phone,
           category: "govt",
-          division: "ঢাকা",
-          district: "কিশোরগঞ্জ",
-          upazila: "কিশোরগঞ্জ সদর",
           updatedAt: new Date().toISOString()
         });
       }
     });
+
+    if (contacts.length === 0) {
+      console.log("কোনো ডাটা পাওয়া যায়নি অথবা সাইটের লেআউট ভিন্ন।");
+      return;
+    }
 
     const batch = db.batch();
     contacts.forEach(contact => {
@@ -43,10 +56,11 @@ async function scrapeGovContacts() {
     });
 
     await batch.commit();
-    console.log("সব তথ্য সফলভাবে ক্লাউড ডাটাবেসে আপডেট করা হয়েছে!");
+    console.log(`সফলভাবে ${contacts.length} টি কন্টাক্ট ক্লাউড ডাটাবেসে সেভ করা হয়েছে!`);
 
   } catch (error) {
-    console.error("অটো-স্ক্র্যাপিংয়ে ত্রুটি:", error);
+    console.error("অটো-স্ক্র্যাপিংয়ে ত্রুটি:", error.message);
+    process.exit(1);
   }
 }
 
