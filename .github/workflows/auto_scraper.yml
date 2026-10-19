@@ -20,7 +20,7 @@ jobs:
       - name: Install Dependencies
         run: |
           npm init -y
-          npm install axios cheerio firebase-admin
+          npm install axios cheerio firebase-admin@11.11.1
 
       - name: Run Scraper
         env:
